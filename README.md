@@ -6,7 +6,7 @@ Sqlp is an alternate sqlite prompt that's meant for ad-hoc reporting and aggrega
 It uses readline for editing, unlike sqlite's normal interactive commandline.
 
 ## Data Loading
-* Load CSV into a newly created table -- assumes first row is a header row
+* Load CSV into a newly created table -- assumes first row is a header row -- if you specify a file ending in `.csv` sqlp on the commandline, it'll create a new db file with the same name, but with a `.db` extension and import the csv file into a table named `csv`.
 * Load TSV into a newly created table -- assumes first row is a header row
 * Explode a table with a json-containing column into a new table with the object attributes as columns. Assumes the column contents are a single JSON object literal.
 * Load a log file into a table of: file, data -- the table's rowid will give you ordering.
@@ -14,7 +14,8 @@ It uses readline for editing, unlike sqlite's normal interactive commandline.
 
 ## Output Formatting
 * repr - outputs rows using Python's `repr` function
-* jq - can pipe a single output row to jq for processing
+* jq - can pipe a single output column to jq for processing
+* gron - pipe a single output column to jq for processing
 * line - returns results like this
 ```
 a = 1
