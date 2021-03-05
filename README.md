@@ -15,7 +15,7 @@ It uses readline for editing, unlike sqlite's normal interactive commandline.
 ## Output Formatting
 * repr - outputs rows using Python's `repr` function
 * jq - can pipe a single output column to jq for processing
-* gron - pipe a single output column to jq for processing
+* gron - pipe a single output column to gron for processing
 * line - returns results like this
 ```
 a = 1
