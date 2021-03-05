@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/env python
 import csv
 import itertools
 import json
@@ -41,6 +41,7 @@ def create_table_if_not_exists(table: str, cols: List[str], conn: Connection) ->
     )
     stmt = "SELECT name, sql FROM sqlite_master WHERE name = '%s'" % (table,)
     cur = conn.cursor()
+    print("executing " + stmt)
     cur.execute(stmt)
     results = cur.fetchall()
     if len(results) == 0:
@@ -173,7 +174,7 @@ def explode_json(conn: Connection, old_table: str, column: str, new_table: str) 
         new_table,
         ", ".join(["%s TEXT" % despecial(k) for k in keys_list]),
     )
-    # print("STMT: " + stmt)
+    print("STMT: " + stmt)
     cur.execute(stmt)
 
     extracts = ["jsextract('[\"%s\"]', %s)" % (key, column) for key in keys_list]
@@ -243,6 +244,19 @@ def display_column_results(cur: Cursor) -> None:
     print("%d row(s) in set" % len(results))
 
 
+def display_gron_results(cur: Cursor) -> None:
+    if len(cur.description) == 1:
+        if len(DISPLAY_MODE[1]) == 0:
+            cmd = "gron"
+        else:
+            cmd = "gron " + " ".join(DISPLAY_MODE[1])
+
+        p = os.popen(cmd, "w")
+        cursor_iter(cur, lambda row: p.write(row[0] + "\n"))
+        p.close()
+    else:
+        print("cannot use .mode gron with multicolumn results")
+
 def display_jq_results(cur: Cursor) -> None:
     if len(cur.description) == 1:
         if len(DISPLAY_MODE[1]) == 0:
@@ -285,6 +299,9 @@ def display_json_results(cur: Cursor) -> None:
 def display_results(cur: Cursor) -> None:
     if DISPLAY_MODE[0] == "repr":
         cursor_iter(cur, lambda row: print(row))
+ 
+    elif DISPLAY_MODE[0] == "gron":
+        display_gron_results(cur)
 
     elif DISPLAY_MODE[0] == "jq":
         display_jq_results(cur)
@@ -373,7 +390,7 @@ def help(conn: Connection) -> None:
 
 def mode(conn: Connection, mode: str, *rest: Sequence[str]) -> None:
     # won't bother: ascii html insert quote tabs tcl
-    valid_modes = ["jq", "repr", "line", "list", "csv", "column", "json"]
+    valid_modes = ["jq", "repr", "line", "list", "csv", "column", "json", "gron"]
     if mode not in valid_modes:
         print("ERROR: Invalid mode, valid kinds are " + ", ".join(valid_modes))
     if mode == "column":
@@ -657,6 +674,28 @@ def jsextract(path: str, js: str) -> Optional[str]:
         return None
 
 
+def days_to_dhms(value: str) -> str:
+    days = float(value)
+    r = []
+    if days >= 1:
+        d = int(days)
+        days -= d
+        r.append(f"{d}d ")
+    hours = days * 24
+    if r or hours >= 1:
+        h = int(hours)
+        hours -= h
+        r.append("%02d:" % h)
+    mins = hours * 60
+    if r or mins >= 1:
+        m = int(mins)
+        mins -= m
+        r.append("%02d:" % m)
+    secs = mins * 60
+    r.append("%05.2f" % secs)
+    return "".join(r)
+
+    
 def openConn(file: str) -> Connection:
     sqlite3.enable_callback_tracebacks(True)
     conn = sqlite3.connect(file)
@@ -668,6 +707,7 @@ def openConn(file: str) -> Connection:
     conn.create_function("jsextract", 2, jsextract)
     conn.create_function("jsvalid", 1, jsvalid)
     conn.create_function("_js_keys", 1, _js_keys)
+    conn.create_function("days_to_dhms", 1, days_to_dhms)
     return conn
 
 
@@ -723,21 +763,24 @@ if __name__ == "__main__":
             "The db file need not previously exist, it will be created if not exists."
         )
 
-    print("sqlp")
+    print("Drew's fancy shmancy sqlite prompt")
     print("SQLite version %s" % sqlite3.sqlite_version)
     print('Enter ".help" for usage hints.')
 
-    conn = openConn(sys.argv[1])
+    filename = sys.argv[1]
+    if filename[-4:] == '.csv':
+        dbname = filename[:-4] + '.db'
+        conn = openConn(dbname)
+        csv_import(conn, filename, "csv")
+    else:
+        conn = openConn(filename)
 
     try:
         readline.read_history_file(HISTORY_FILE)
     except FileNotFoundError:
         readline.write_history_file(HISTORY_FILE)
         pass  # ok that the history file isn't there yet
-    except os.error:
-        readline.write_history_file(HISTORY_FILE)
-        pass
-    
+
     buffer = ""
     linecount = 0
     cont = False
@@ -753,6 +796,7 @@ if __name__ == "__main__":
 
             if not cont and line[0] == ".":
                 conn = do_dot_command(line, conn)
+                readline.append_history_file(1, HISTORY_FILE)
                 continue
 
             if not buffer:
