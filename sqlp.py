@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import csv
 import itertools
 import json
@@ -125,7 +125,9 @@ def load_log(conn: Connection, file: str, table: str) -> None:
     o = open(file)
     lines = o.readlines()
     llines = [line.strip() for line in lines]
+    print("Inserting %d rows" % len(llines))
     cur.executemany(stmt, zip(fileRepeat, llines))
+    conn.commit()
 
 
 def gsh_line_split(line: str) -> List[str]:
@@ -410,6 +412,21 @@ def dothrow(conn: Connection) -> None:
     raise SyntaxError("FOO!")
 
 
+def doread(in_conn: Connection, file: str) -> None:
+    global conn, filename
+    orig_conn = conn
+    orig_name = filename
+    orig_stdin = sys.stdin
+    sys.stdin = open(file)
+    try:
+        run()
+    except:
+        pass
+    conn = orig_conn
+    sys.stdin = orig_stdin
+    filename = orig_name
+
+
 class Command(object):
     def __init__(
         self,
@@ -472,6 +489,7 @@ commands = {
         + " a string. New table excludes src_rowid, if it is in the source table, and the column you"
         + " split on.",
     ),
+    "read": Command(1, doread, doc=".read sql_file -- process commands from sql_file as if they were read at the console"),
 }
 
 
@@ -756,7 +774,8 @@ def strip_comments(query: str) -> str:
     return "".join(outl).strip()
 
 
-if __name__ == "__main__":
+def run():
+    global filename, conn
     if len(sys.argv) != 2:
         print("usage: sqlp dbfile")
         print(
@@ -845,3 +864,5 @@ if __name__ == "__main__":
             print(traceback.format_exc())
     conn.close()
 
+if __name__ == '__main__':
+    run()
