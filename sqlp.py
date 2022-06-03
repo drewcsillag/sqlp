@@ -174,7 +174,7 @@ def explode_json(conn: Connection, old_table: str, column: str, new_table: str) 
     # possibly create if not exists
     stmt = "CREATE TABLE %s (src_rowid TEXT, %s);" % (
         new_table,
-        ", ".join(["%s TEXT" % despecial(k) for k in keys_list]),
+        ", ".join(["`%s` TEXT" % despecial(k) for k in keys_list]),
     )
     print("STMT: " + stmt)
     cur.execute(stmt)
