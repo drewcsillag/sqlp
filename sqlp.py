@@ -37,7 +37,7 @@ def despecial(word: str) -> str:
 def create_table_if_not_exists(table: str, cols: List[str], conn: Connection) -> bool:
     create_stmt = "CREATE TABLE %s (%s)" % (
         table,
-        ", ".join(["%s TEXT" % despecial(i) for i in cols]),
+        ", ".join(["`%s` TEXT" % despecial(i) for i in cols]),
     )
     stmt = "SELECT name, sql FROM sqlite_master WHERE name = '%s'" % (table,)
     cur = conn.cursor()
@@ -838,7 +838,7 @@ def run():
                     cur = conn.cursor()
                     cur.execute(buffer)
 
-                    if buffer.lstrip().upper().startswith("SELECT"):
+                    if buffer.lstrip().upper().startswith("SELECT") or buffer.lstrip().upper().startswith("WITH"):
                         display_results(cur)
                         # cur.fetchall(), cur.description, cur.rowcount)
                     else:
