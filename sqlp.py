@@ -21,6 +21,7 @@ LIST_TYPE = type([])  # type: Any
 
 COLUMN_SAFE = string.digits + string.ascii_letters + "_"
 
+READ_MODE=False
 
 def despecial(word: str) -> str:
     if word in ["index"]:
@@ -413,15 +414,18 @@ def dothrow(conn: Connection) -> None:
 
 
 def doread(in_conn: Connection, file: str) -> None:
-    global conn, filename
+    global conn, filename, READ_MODE
     orig_conn = conn
     orig_name = filename
     orig_stdin = sys.stdin
     sys.stdin = open(file)
+    orig_read_mode = READ_MODE
+    READ_MODE = True
     try:
         run()
     except:
         pass
+    READ_MODE = orig_read_mode
     conn = orig_conn
     sys.stdin = orig_stdin
     filename = orig_name
@@ -810,8 +814,11 @@ def run():
             else:
                 line = input("SQLP> ")
 
-            if not line:
+            if not line or line.strip().startswith('--'):
                 continue
+
+            if READ_MODE:
+                print(line)
 
             if not cont and line[0] == ".":
                 conn = do_dot_command(line, conn)
