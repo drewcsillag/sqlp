@@ -40,7 +40,15 @@ def create_table_if_not_exists(table: str, cols: List[str], conn: Connection) ->
         table,
         ", ".join(["`%s` TEXT" % despecial(i) for i in cols]),
     )
-    stmt = "SELECT name, sql FROM sqlite_master WHERE name = '%s'" % (table,)
+
+    bits = table.split('.', 1)
+    if len(bits) == 1:
+        schema = ''
+        local_table = bits[0]
+    else:
+        local_table = bits[1]
+        schema = bits[0] + '.'
+    stmt = "SELECT name, sql FROM %ssqlite_master WHERE name = '%s'" % (schema, local_table,)
     cur = conn.cursor()
     print("executing " + stmt)
     cur.execute(stmt)
@@ -60,8 +68,10 @@ def create_table_if_not_exists(table: str, cols: List[str], conn: Connection) ->
     return True
 
 
-def get_create_stmt(conn: Connection, table: str) -> str:
-    stmt = "SELECT sql from sqlite_master where name = '%s';" % table
+def get_create_stmt(conn: Connection, schema: str, table: str) -> str:
+    if schema:
+        schema = schema + '.'
+    stmt = "SELECT sql from %ssqlite_master where name = '%s';" % (schema, table)
     cur = conn.cursor()
     cur.execute(stmt)
     desc = cur.fetchone()[0]
@@ -70,11 +80,20 @@ def get_create_stmt(conn: Connection, table: str) -> str:
 
 
 def describe(conn: Connection, table: str) -> None:
-    print(get_create_stmt(conn, table))
+    bits = table.split('.', 1)
+    if len(bits) == 1:
+        schema = ''
+    else:
+        schema, table = bits
+    print(get_create_stmt(conn, schema, table))
 
 
-def show_tables(conn: Connection) -> None:
-    stmt = "SELECT tbl_name from sqlite_master where type = 'table';"
+def show_tables(conn: Connection, *rest: Sequence[str]) -> None:
+    if len(rest) == 0:
+        schema = ''
+    else:
+        schema = rest[0] + '.'
+    stmt = "SELECT tbl_name from %ssqlite_master where type = 'table';" % (schema,)
     cur = conn.cursor()
     cur.execute(stmt)
     tables = [i[0] for i in cur.fetchall()]
@@ -463,7 +482,7 @@ commands = {
         describe,
         doc=".desc table_name - show the create table command for table_name",
     ),
-    "tables": Command(0, show_tables, doc="list tables in current db"),
+    "tables": Command(0, show_tables, doc="list tables in current db, or add the schema name of an attached db to see its schema", varargs=True),
     "loadlog": Command(2, load_log, doc=".loadlog file table - import file into table"),
     "loadgshlog": Command(
         2,
