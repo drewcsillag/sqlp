@@ -93,7 +93,7 @@ def show_tables(conn: Connection, *rest: Sequence[str]) -> None:
         schema = ''
     else:
         schema = rest[0] + '.'
-    stmt = "SELECT tbl_name from %ssqlite_master where type = 'table';" % (schema,)
+    stmt = "SELECT tbl_name from %ssqlite_master where type = 'table' order by tbl_name;" % (schema,)
     cur = conn.cursor()
     cur.execute(stmt)
     tables = [i[0] for i in cur.fetchall()]
@@ -206,7 +206,7 @@ def explode_json(conn: Connection, old_table: str, column: str, new_table: str) 
         old_table,
         column,
     )
-    # print("STMT: " + stmt)
+    print("STMT: " + stmt)
 
     cur.execute(stmt)
     conn.commit()
