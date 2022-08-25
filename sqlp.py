@@ -85,7 +85,12 @@ def describe(conn: Connection, table: str) -> None:
         schema = ''
     else:
         schema, table = bits
-    print(get_create_stmt(conn, schema, table))
+    stmt = "pragma table_xinfo(`%s`);" % table
+    cur = conn.cursor()
+    cur.execute(stmt)
+    display_column_results(cur)
+    #print(get_create_stmt(conn, schema, table))
+    cur.close()
 
 
 def show_tables(conn: Connection, *rest: Sequence[str]) -> None:
@@ -480,7 +485,7 @@ commands = {
     "desc": Command(
         1,
         describe,
-        doc=".desc table_name - show the create table command for table_name",
+        doc=".desc table_name - show column info about table_name"
     ),
     "tables": Command(0, show_tables, doc="list tables in current db, or add the schema name of an attached db to see its schema", varargs=True),
     "loadlog": Command(2, load_log, doc=".loadlog file table - import file into table"),
@@ -864,7 +869,7 @@ def run():
                     cur = conn.cursor()
                     cur.execute(buffer)
 
-                    if buffer.lstrip().upper().startswith("SELECT") or buffer.lstrip().upper().startswith("WITH"):
+                    if buffer.lstrip().upper().startswith("SELECT") or buffer.lstrip().upper().startswith("WITH") or buffer.lstrip().upper().startswith("PRAGMA"):
                         display_results(cur)
                         # cur.fetchall(), cur.description, cur.rowcount)
                     else:

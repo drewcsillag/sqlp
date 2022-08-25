@@ -2,6 +2,18 @@
 
 Sqlp is an alternate sqlite prompt that's meant for ad-hoc reporting and aggregation. It's designed for cases where you have csv datasets, logs, json entries, etc. that you want to process. I use it when tools like `sed`, `grep`, etc. get cumbersome to work with when doing various forms of analysis.
 
+# Features
+It uses readline for editing, unlike sqlite's normal interactive commandline.
+
+NOTE: some of what's below is from before SQLite's commandline had them. That said, as of 2022-08-25 the following are still not
+supported by the SQLite command line:
+ * regexes (without a suitable plugin) -- sqlp uses Python's PCRE regex support
+ * jsonexplode
+ * loadlines
+
+Given the limited things that only sqlp has, there's also [SQLite Commands](https://github.com/drewcsillag/sqlite_commands), which
+is SQLite native json exploding, and loadlines (and other stuff too).
+
 ## Data Loading
 * Load CSV into a newly created table -- assumes first row is a header row -- if you specify a file ending in `.csv` sqlp on the commandline, it'll create a new db file with the same name, but with a `.db` extension and import the csv file into a table named `csv`.
 * Load TSV into a newly created table -- assumes first row is a header row
