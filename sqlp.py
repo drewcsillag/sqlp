@@ -439,18 +439,18 @@ def dothrow(conn: Connection) -> None:
 
 def doread(in_conn: Connection, file: str) -> None:
     global conn, filename, READ_MODE
-    orig_conn = conn
+    # orig_conn = conn
     orig_name = filename
     orig_stdin = sys.stdin
     sys.stdin = open(file)
     orig_read_mode = READ_MODE
     READ_MODE = True
     try:
-        run()
+        mainloop(conn)
     except:
         pass
     READ_MODE = orig_read_mode
-    conn = orig_conn
+    # conn = orig_conn
     sys.stdin = orig_stdin
     filename = orig_name
 
@@ -741,7 +741,12 @@ def days_to_dhms(value: str) -> str:
     r.append("%05.2f" % secs)
     return "".join(r)
 
-    
+def writefile(filename, text):
+    open(filename,'w').write(text)
+
+def readfile(filename):
+    return open(filename).read()
+
 def openConn(file: str) -> Connection:
     sqlite3.enable_callback_tracebacks(True)
     conn = sqlite3.connect(file)
@@ -754,6 +759,8 @@ def openConn(file: str) -> Connection:
     conn.create_function("jsvalid", 1, jsvalid)
     conn.create_function("_js_keys", 1, _js_keys)
     conn.create_function("days_to_dhms", 1, days_to_dhms)
+    conn.create_function('writefile', 2, writefile)
+    conn.create_function('readfile', 1, readfile)
     return conn
 
 
@@ -827,7 +834,11 @@ def run():
     except FileNotFoundError:
         readline.write_history_file(HISTORY_FILE)
         pass  # ok that the history file isn't there yet
+    mainloop(conn)
+    conn.close()
 
+
+def mainloop(conn):
     buffer = ""
     linecount = 0
     cont = False
@@ -893,7 +904,6 @@ def run():
             buffer = ""
 
             print(traceback.format_exc())
-    conn.close()
 
 if __name__ == '__main__':
     run()
