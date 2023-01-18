@@ -15,7 +15,7 @@ from sqlite3 import Connection, Cursor
 from typing import Any, Callable, List, Optional, Sequence, Set, Tuple, Union
 
 HISTORY_FILE = os.environ["HOME"] + "/.sqlp_history"
-DISPLAY_MODE = ["column", ()]  # type: Sequence[Any]
+DISPLAY_MODE = ["table", ()]  # type: Sequence[Any]
 DICT_TYPE = type({})  # type: Any
 LIST_TYPE = type([])  # type: Any
 
@@ -346,7 +346,7 @@ def display_results(cur: Cursor) -> None:
         out = csv.writer(sys.stdout)
         cursor_iter(cur, lambda row: out.writerow(row))
 
-    elif DISPLAY_MODE[0] == "column":
+    elif DISPLAY_MODE[0] == "table":
         display_column_results(cur)
 
     elif DISPLAY_MODE[0] == "json":
