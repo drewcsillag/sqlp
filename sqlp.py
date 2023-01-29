@@ -26,6 +26,7 @@ SQLITE_API_PATH = ""
 filename = None
 conn = None
 
+
 def despecial(word: str) -> str:
     if word in ["index"]:
         return "_" + word
