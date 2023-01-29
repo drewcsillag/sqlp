@@ -21,7 +21,10 @@ LIST_TYPE = type([])  # type: Any
 
 COLUMN_SAFE = string.digits + string.ascii_letters + "_"
 
-READ_MODE=False
+READ_MODE = False
+SQLITE_API_PATH = ""
+filename = None
+conn = None
 
 def despecial(word: str) -> str:
     if word in ["index"]:
@@ -41,14 +44,17 @@ def create_table_if_not_exists(table: str, cols: List[str], conn: Connection) ->
         ", ".join(["`%s` TEXT" % despecial(i) for i in cols]),
     )
 
-    bits = table.split('.', 1)
+    bits = table.split(".", 1)
     if len(bits) == 1:
-        schema = ''
+        schema = ""
         local_table = bits[0]
     else:
         local_table = bits[1]
-        schema = bits[0] + '.'
-    stmt = "SELECT name, sql FROM %ssqlite_master WHERE name = '%s'" % (schema, local_table,)
+        schema = bits[0] + "."
+    stmt = "SELECT name, sql FROM %ssqlite_master WHERE name = '%s'" % (
+        schema,
+        local_table,
+    )
     cur = conn.cursor()
     print("executing " + stmt)
     cur.execute(stmt)
@@ -70,7 +76,7 @@ def create_table_if_not_exists(table: str, cols: List[str], conn: Connection) ->
 
 def get_create_stmt(conn: Connection, schema: str, table: str) -> str:
     if schema:
-        schema = schema + '.'
+        schema = schema + "."
     stmt = "SELECT sql from %ssqlite_master where name = '%s';" % (schema, table)
     cur = conn.cursor()
     cur.execute(stmt)
@@ -80,25 +86,28 @@ def get_create_stmt(conn: Connection, schema: str, table: str) -> str:
 
 
 def describe(conn: Connection, table: str) -> None:
-    bits = table.split('.', 1)
+    bits = table.split(".", 1)
     if len(bits) == 1:
-        schema = ''
+        schema = ""
     else:
         schema, table = bits
     stmt = "pragma table_xinfo(`%s`);" % table
     cur = conn.cursor()
     cur.execute(stmt)
     display_column_results(cur)
-    #print(get_create_stmt(conn, schema, table))
+    # print(get_create_stmt(conn, schema, table))
     cur.close()
 
 
-def show_tables(conn: Connection, *rest: Sequence[str]) -> None:
+def show_tables(conn: Connection, *rest: str) -> None:
     if len(rest) == 0:
-        schema = ''
+        schema = ""
     else:
-        schema = rest[0] + '.'
-    stmt = "SELECT tbl_name from %ssqlite_master where type = 'table' order by tbl_name;" % (schema,)
+        schema = rest[0] + "."
+    stmt = (
+        "SELECT tbl_name from %ssqlite_master where type = 'table' order by tbl_name;"
+        % (schema,)
+    )
     cur = conn.cursor()
     cur.execute(stmt)
     tables = [i[0] for i in cur.fetchall()]
@@ -246,6 +255,9 @@ def sub_row_None_to_NULL(row: List[str]) -> Tuple[Any, ...]:
 
 def display_column_results(cur: Cursor) -> None:
     results = cur.fetchall()
+    if not cur.description:
+        print("result was empty")
+        return
     numCols = len(cur.description)
     maxes = [0] * numCols
 
@@ -283,6 +295,7 @@ def display_gron_results(cur: Cursor) -> None:
         p.close()
     else:
         print("cannot use .mode gron with multicolumn results")
+
 
 def display_jq_results(cur: Cursor) -> None:
     if len(cur.description) == 1:
@@ -326,7 +339,7 @@ def display_json_results(cur: Cursor) -> None:
 def display_results(cur: Cursor) -> None:
     if DISPLAY_MODE[0] == "repr":
         cursor_iter(cur, lambda row: print(row))
- 
+
     elif DISPLAY_MODE[0] == "gron":
         display_gron_results(cur)
 
@@ -355,7 +368,7 @@ def display_results(cur: Cursor) -> None:
 
 def get_cols_for_table(conn: Connection, table: str) -> List[str]:
     # Admittedly hokey, but should be good enough
-    create_stmt = get_create_stmt(conn, table)
+    create_stmt = get_create_stmt(conn, "", table)
     open_paren = create_stmt.index("(")
     close_paren = create_stmt.index(")")
     return [i.split()[0] for i in create_stmt[open_paren + 1 : close_paren].split(",")]
@@ -401,6 +414,11 @@ def help(conn: Connection) -> None:
     for k in ks:
         print(".%s - %s" % (k, commands[k].doc))
 
+    cur = conn.cursor()
+    cur.execute("SELECT command, args, docstring FROM api.help")
+    for (cmd, arg, ds) in cur.fetchall():
+        print(".%s - .%s %s -- %s" % (cmd, cmd, arg, ds))
+
     print("extension functions:")
     print("    REGEXP sqlite3 syntax")
     print("    regex_sub     - pattern replacement value")
@@ -437,6 +455,11 @@ def dothrow(conn: Connection) -> None:
     raise SyntaxError("FOO!")
 
 
+def doshell(conn: Connection, *rest: str) -> None:
+    # print("executing " + (' '.join(rest)))
+    os.system(" ".join(rest))
+
+
 def doread(in_conn: Connection, file: str) -> None:
     global conn, filename, READ_MODE
     # orig_conn = conn
@@ -446,7 +469,7 @@ def doread(in_conn: Connection, file: str) -> None:
     orig_read_mode = READ_MODE
     READ_MODE = True
     try:
-        mainloop(conn)
+        mainloop(conn, False)
     except:
         pass
     READ_MODE = orig_read_mode
@@ -483,22 +506,15 @@ commands = {
         doc=".tsvimport file table - import tsv file into table -- assumes a header names row",
     ),
     "desc": Command(
-        1,
-        describe,
-        doc=".desc table_name - show column info about table_name"
+        1, describe, doc=".desc table_name - show column info about table_name"
     ),
-    "tables": Command(0, show_tables, doc="list tables in current db, or add the schema name of an attached db to see its schema", varargs=True),
-    "loadlog": Command(2, load_log, doc=".loadlog file table - import file into table"),
-    "loadgshlog": Command(
-        2,
-        load_gsh_log,
-        doc=".loadgshlog file table - import file from gsh output (has `host:` prefix) into table",
+    "tables": Command(
+        0,
+        show_tables,
+        doc="list tables in current db, or add the schema name of an attached db to see its schema",
+        varargs=True,
     ),
-    "jsonexplode": Command(
-        3,
-        explode_json,
-        doc=".jsonexplode old_table, column, new_table -- explode old_table.column into new_table",
-    ),
+    "shell": Command(1, doshell, varargs=True, doc="cmd - execute shell command"),
     "help": Command(0, help, doc="show this help info"),
     "mode": Command(
         1,
@@ -506,7 +522,9 @@ commands = {
         varargs=True,
         doc="change output mode, valid values are jq, repr, line, list, csv, and column",
     ),
-    "open": Command(1, dotopen, doc=".open sqlitedbfile"),
+    "open": Command(
+        1, dotopen, doc=".open sqlitedbfile close current dbfile and open a new one"
+    ),
     "dothrow": Command(0, dothrow),
     "extractbycolval": Command(
         4,
@@ -517,8 +535,26 @@ commands = {
         + " a string. New table excludes src_rowid, if it is in the source table, and the column you"
         + " split on.",
     ),
-    "read": Command(1, doread, doc=".read sql_file -- process commands from sql_file as if they were read at the console"),
+    "read": Command(
+        1,
+        doread,
+        doc=".read sql_file -- process commands from sql_file as if they were read at the console",
+    ),
 }
+
+
+def try_sqlite_command(conn, line):
+    cmd = line.split(" ")[0]
+    cur = conn.cursor()
+    cur.execute("select 1 from api.help where command = ?", (cmd[1:],))
+    res = cur.fetchall()
+    # print("res is %s, cmd is %s" % (repr(res), cmd))
+    if len(res) == 0:
+        print("unknown dot command %s" % cmd)
+        return conn
+    cur.execute("INSERT INTO api.command (command) VALUES (?)", (line[1:],))
+    doread(conn, SQLITE_API_PATH + "/api.sql")
+    return conn
 
 
 def do_dot_command(line: str, conn: Connection) -> Connection:
@@ -526,8 +562,9 @@ def do_dot_command(line: str, conn: Connection) -> Connection:
     cmd_and_args = [l.strip() for l in line.strip().split(" ")]
     cmd = cmd_and_args[0]
     if cmd[1:] not in commands:
-        print("unknown dot command %s" % cmd)
-        return conn
+        return try_sqlite_command(conn, line)
+        # print("unknown dot command %s" % cmd)
+        # return conn
 
     command = commands[cmd[1:]]
     numargs = len(cmd_and_args) - 1
@@ -741,11 +778,16 @@ def days_to_dhms(value: str) -> str:
     r.append("%05.2f" % secs)
     return "".join(r)
 
+
 def writefile(filename, text):
-    open(filename,'w').write(text)
+    dn = os.path.dirname(filename)
+    os.makedirs(dn, exist_ok=True)
+    open(filename, "w").write(text)
+
 
 def readfile(filename):
     return open(filename).read()
+
 
 def openConn(file: str) -> Connection:
     sqlite3.enable_callback_tracebacks(True)
@@ -759,8 +801,8 @@ def openConn(file: str) -> Connection:
     conn.create_function("jsvalid", 1, jsvalid)
     conn.create_function("_js_keys", 1, _js_keys)
     conn.create_function("days_to_dhms", 1, days_to_dhms)
-    conn.create_function('writefile', 2, writefile)
-    conn.create_function('readfile', 1, readfile)
+    conn.create_function("writefile", 2, writefile)
+    conn.create_function("readfile", 1, readfile)
     return conn
 
 
@@ -809,6 +851,15 @@ def strip_comments(query: str) -> str:
     return "".join(outl).strip()
 
 
+def load_sqlite_api(conn, argv0):
+    path = os.path.dirname(argv0)
+    sqlite_apidir = "%s/sqlite_api/" % path
+    doread(conn, sqlite_apidir + "api_init.sql")
+    conn.execute("INSERT INTO api.config (path) VALUES (?)", (sqlite_apidir,))
+    global SQLITE_API_PATH
+    SQLITE_API_PATH = sqlite_apidir
+
+
 def run():
     global filename, conn
     if len(sys.argv) != 2:
@@ -822,12 +873,14 @@ def run():
     print('Enter ".help" for usage hints.')
 
     filename = sys.argv[1]
-    if filename[-4:] == '.csv':
-        dbname = filename[:-4] + '.db'
+    if filename[-4:] == ".csv":
+        dbname = filename[:-4] + ".db"
         conn = openConn(dbname)
         csv_import(conn, filename, "csv")
     else:
         conn = openConn(filename)
+
+    load_sqlite_api(conn, sys.argv[0])
 
     try:
         readline.read_history_file(HISTORY_FILE)
@@ -838,22 +891,25 @@ def run():
     conn.close()
 
 
-def mainloop(conn):
+def mainloop(conn, human=True):
     buffer = ""
     linecount = 0
     cont = False
     while True:
         try:
-            if cont:
-                line = input("....> ")
+            if human:
+                if cont:
+                    line = input("....> ")
+                else:
+                    line = input("SQLP> ")
             else:
-                line = input("SQLP> ")
+                line = input()
 
-            if not line or line.strip().startswith('--'):
+            if not line or line.strip().startswith("--"):
                 continue
 
-            if READ_MODE:
-                print(line)
+            # if not READ_MODE:
+            #     print(line)
 
             if not cont and line[0] == ".":
                 conn = do_dot_command(line, conn)
@@ -870,21 +926,30 @@ def mainloop(conn):
             if sqlite3.complete_statement(buffer):
                 # smash multiline queries into one for the history
                 for i in range(linecount):
-                    readline.remove_history_item(0)
+                    try:
+                        readline.remove_history_item(0)
+                    except ValueError:  # if the history item isn't there (due to .read at init)
+                        pass
                 linecount = 0
                 buffer = strip_comments(buffer)
-                readline.add_history(buffer)
-                readline.append_history_file(1, HISTORY_FILE)
+                if not READ_MODE:
+                    readline.add_history(buffer)
+                    readline.append_history_file(1, HISTORY_FILE)
                 try:
                     buffer = buffer.strip()
                     cur = conn.cursor()
                     cur.execute(buffer)
 
-                    if buffer.lstrip().upper().startswith("SELECT") or buffer.lstrip().upper().startswith("WITH") or buffer.lstrip().upper().startswith("PRAGMA"):
-                        display_results(cur)
-                        # cur.fetchall(), cur.description, cur.rowcount)
-                    else:
-                        print("rowcount: %d" % cur.rowcount)
+                    if human:
+                        if (
+                            buffer.lstrip().upper().startswith("SELECT")
+                            or buffer.lstrip().upper().startswith("WITH")
+                            or buffer.lstrip().upper().startswith("PRAGMA")
+                        ):
+                            display_results(cur)
+                            # cur.fetchall(), cur.description, cur.rowcount)
+                        else:
+                            print("rowcount: %d" % cur.rowcount)
                     cur.close()
                     conn.commit()
                 except sqlite3.Error as e:
@@ -905,5 +970,6 @@ def mainloop(conn):
 
             print(traceback.format_exc())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     run()
